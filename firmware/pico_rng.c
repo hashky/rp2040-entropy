@@ -71,6 +71,8 @@ static uint8_t ep0_buf[64];
 // Global data buffer for EP1
 static uint8_t ep1_buf[64];
 
+static uint64_t boot_ent;
+
 // Struct defining the device configuration
 static struct usb_device_configuration dev_config = {
         .device_descriptor = &device_descriptor,
@@ -619,24 +621,36 @@ void get_random_data(char *buf, uint16_t len) {
         uint64_t random_word = 0xcbf29ce484222325;
         for (int round = 0; round < 8; round++)
         {
-            uint64_t word = 0x0;
-            for (int n = 0; n < 64; n++)
+            uint8_t word = (boot_ent>>round)&0xff;
+            for (int n = 0; n < 8; n++)
             {
-                uint8_t bit1, bit2;
-                do
-                {
-                    bit1 = rosc_hw->randombit & 0xff;
-                    // sleep_ms(1);
-                    bit2 = rosc_hw->randombit & 0xff;
-                } while (0);
-                word = (word << 1) | bit1;
+                word = (word << 1) ^ (rosc_hw->randombit & 0xff);
+
             }
-            random_word ^= word^board_millis()^adc_read();
             random_word *= 0x00000100000001B3;
+            random_word ^= word^((adc_read()^board_millis())%0x100);
         }
         memcpy(buf + i, &random_word, sizeof(random_word));
     }
     led_set_blink(BLINK_MOUNTED);
+}
+
+uint64_t boot_entropy(){
+    uint64_t _ent;
+    uint16_t len=0;
+    uint16_t t0=adc_read();
+    uint16_t t1l = 0;
+    while (len<sizeof(uint64_t)*8){
+        uint16_t t1 = adc_read() - t0;
+        if ((t1l & 0xf)^(t1 & 0xf)){
+            _ent = (_ent << 1) ^ t1&0x1;
+            len++;
+            t0=adc_read();
+            t1l = t1;
+        }
+    }
+    return _ent;
+
 }
 
 /**
@@ -680,9 +694,9 @@ int main(void) {
 
     // ADC
     adc_init();
-    adc_gpio_init(27);
-    adc_select_input(1);
-
+    adc_set_temp_sensor_enabled(1) ;
+    adc_select_input(4);
+    boot_ent=boot_entropy();
     printf("USB pico rng\n");
     usb_device_init();
 
