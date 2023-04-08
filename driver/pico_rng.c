@@ -5,6 +5,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/uaccess.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -12,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/hw_random.h>
+#include <linux/random.h>
 #include <linux/kthread.h>
 
 MODULE_LICENSE("GPL");
@@ -114,12 +116,19 @@ static struct file_operations pico_rng_fops = {
 	.open           = pico_rng_open,
 };
 
+
+static char v*usb_rng_devnode(struct device *dev, umode_t *mode){
+    if (mode==0)
+        *mode = 0644;
+    return kasprintf(GFP_KERNEL, "%s", dev_name(dev));
+}
 /**
  * USB class data structure
  **/
- struct usb_class_driver pico_rng_usb_class = {
-	.name           = "pico_rng",
-	.fops           = &pico_rng_fops,
+struct usb_class_driver pico_rng_usb_class = {
+    .name           = "pico_rng",
+    .fops           = &pico_rng_fops,
+    .devnode        = &usb_rng_devnode
 };
 
 /**
@@ -128,11 +137,11 @@ static struct file_operations pico_rng_fops = {
  **/
 static int pico_rng_usb_probe(struct usb_interface *interface, const struct usb_device_id *id)
 {
-	int retval = -ENODEV;
+    int retval = -ENODEV;
 
-	module_data.dev = interface_to_usbdev(interface);
-	if(!module_data.dev)
-	{
+    module_data.dev = interface_to_usbdev(interface);
+    if(!module_data.dev)
+    {
 		LOGGER_ERR("Unable to locate usb device\n");
 		return retval;
 	}
