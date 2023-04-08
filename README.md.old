@@ -63,7 +63,7 @@ sudo firmware/pico_rng_test.py [--performance] [--size] [--endless]
 ```
 
 You can also test the Kernel's random number pool that contains random numbers from the Pico
-![Pico Random Numbers](pico-rng.gif)
+![Pico Random Numbers](figs/pico-rng.gif)
 
 ## Analysis
 

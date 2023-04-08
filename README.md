@@ -71,4 +71,9 @@ this takes a long time. if you are trying to improve the codebase it must pass t
 You can not prove the absence of an underlying deterministic process from the raw data samples alone, so the best way to attempt to check if some data is actually random is to conduct a laundry list of statistical tests that attempt to show that the data is not random. This attempts to demonstrate that even with exhaustive effort, you can not establish the data as having any redundancy necessary for it to be the result of a deterministic process. A deterministic process necessarily has a finite number of operations that define it, and finite information in its initial conditions. Which means that given enough time/samples/iterations, it will have to express some redundant behavior that statistical methods can pick up on. It will essentially run out of new information(entropy) to express, so some form of redundancy will manifest. It requires an infinite amount of data to establish that no such finite deterministic process is the source of said data, so we have to settle for a few gigabytes. The diehard tests seem to want a terabyte or so and will wrap around smaller sets and tell you how many
 
 
+#Test results
+
+distribution of 980K sample
+
+![Distribution](figs/distrib.png)
 
