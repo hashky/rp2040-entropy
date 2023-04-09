@@ -12,6 +12,7 @@
 #include "hardware/gpio.h"
 #include "hardware/adc.h"
 #include "hardware/structs/rosc.h"
+#include "hardware/dma.h"
 
 // For memcpy
 #include <string.h>
@@ -28,6 +29,12 @@
 #include "hardware/resets.h"
 
 #include "pico/time.h"
+
+#define ADC_BUFSIZE 1024
+#define ADC 1
+
+uint8_t adc_sample[ADC_BUFSIZE];
+
 static inline uint32_t board_millis(void)
 {
     return to_ms_since_boot(get_absolute_time());
@@ -615,43 +622,71 @@ void get_random_data(char *buf, uint16_t len) {
     if (len > 64)
         len = 64;
     memset(buf, 0, len);
+    uint64_t _time = 0;
     /* This algorithm generates 2 words, i.e., 8 bytes. */
     /* We apply Fowler–Noll–Vo hash function as it randomizes the input and is quite fast. */
     for (int i = 0; i < len; i += sizeof(uint64_t)) {
         uint64_t random_word = 0xcbf29ce484222325;
         for (int round = 0; round < 8; round++)
         {
-            uint8_t word = (boot_ent>>round)&0xff;
+            uint8_t word = 0;
             for (int n = 0; n < 8; n++)
             {
                 word = (word << 1) ^ (rosc_hw->randombit & 0xff);
 
             }
+            _time = board_millis();
             random_word *= 0x00000100000001B3;
-            random_word ^= word^((adc_read()^board_millis())%0x100);
+            random_word ^= word^((adc_sample[_time%ADC_BUFSIZE]^_time)%0x100);
         }
         memcpy(buf + i, &random_word, sizeof(random_word));
     }
     led_set_blink(BLINK_MOUNTED);
 }
 
-uint64_t boot_entropy(){
-    uint64_t _ent;
-    uint16_t len=0;
-    uint16_t t0=adc_read();
-    uint16_t t1l = 0;
-    while (len<sizeof(uint64_t)*8){
-        uint16_t t1 = adc_read() - t0;
-        if ((t1l & 0xf)^(t1 & 0xf)){
-            _ent = (_ent << 1) ^ t1&0x1;
-            len++;
-            t0=adc_read();
-            t1l = t1;
-        }
-    }
-    return _ent;
+uint64_t fifoload(){
+    adc_gpio_init(26 + ADC);
+    adc_init();
+    adc_select_input(ADC);
+    adc_fifo_setup(
+        true,    // Write each completed conversion to the sample FIFO
+        true,    // Enable DMA data request (DREQ)
+        1,       // DREQ (and IRQ) asserted when at least 1 sample present
+        false,   // We won't see the ERR bit because of 8 bit reads; disable.
+        true     // Shift each sample to 8 bits when pushing to FIFO
+    );
+
+    adc_set_clkdiv(0);
+
+    // Set up the DMA to start transferring data as soon as it appears in FIFO
+    uint dma_chan = dma_claim_unused_channel(true);
+    dma_channel_config cfg = dma_channel_get_default_config(dma_chan);
+
+    // Reading from constant address, writing to incrementing byte addresses
+    channel_config_set_transfer_data_size(&cfg, DMA_SIZE_8);
+    channel_config_set_read_increment(&cfg, false);
+    channel_config_set_write_increment(&cfg, true);
+
+    // Pace transfers based on availability of ADC samples
+    channel_config_set_dreq(&cfg, DREQ_ADC);
+
+    dma_channel_configure(dma_chan, &cfg,
+        adc_sample,    // dst
+        &adc_hw->fifo,  // src
+        ADC_BUFSIZE,  // transfer count
+        true            // start immediately
+    );
+
+    adc_run(true);
+
+    // Once DMA finishes, stop any new conversions from starting, and clean up
+    // the FIFO in case the ADC was still mid-conversion.
+    dma_channel_wait_for_finish_blocking(dma_chan);
+    adc_run(false);
+    adc_fifo_drain();
 
 }
+
 
 /**
  * @brief EP1 in transfer complete. Prime the EP1 in buffer
@@ -693,10 +728,7 @@ int main(void) {
     led_off_all();
 
     // ADC
-    adc_init();
-    adc_set_temp_sensor_enabled(1) ;
-    adc_select_input(4);
-    boot_ent=boot_entropy();
+    fifoload();
     printf("USB pico rng\n");
     usb_device_init();
 
