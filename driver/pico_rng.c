@@ -117,8 +117,8 @@ static struct file_operations pico_rng_fops = {
 };
 
 
-static char v*usb_rng_devnode(struct device *dev, umode_t *mode){
-    if (mode==0)
+static char *usb_rng_devnode(struct device *dev, umode_t *mode){
+    if (mode!=0)
         *mode = 0644;
     return kasprintf(GFP_KERNEL, "%s", dev_name(dev));
 }

@@ -34,7 +34,7 @@
 #define ADC 1
 
 uint8_t adc_sample[ADC_BUFSIZE];
-
+uint16_t counter=0;
 static inline uint32_t board_millis(void)
 {
     return to_ms_since_boot(get_absolute_time());
@@ -610,41 +610,7 @@ void ep0_out_handler(uint8_t *buf, uint16_t len) {
     return;
 }
 
-/**
- * @brief Get random data using the onboard pico ADC that essentially measure
- *        environmental noise because it is assumed that it is not connected to anything.
- *
- * @param buf the buffer to store the random data in
- * @param len the length of the random data in bytes
- */
-void get_random_data(char *buf, uint16_t len) {
-    led_set_blink(BLINK_PROCESSING);
-    if (len > 64)
-        len = 64;
-    memset(buf, 0, len);
-    uint64_t _time = 0;
-    /* This algorithm generates 2 words, i.e., 8 bytes. */
-    /* We apply Fowler–Noll–Vo hash function as it randomizes the input and is quite fast. */
-    for (int i = 0; i < len; i += sizeof(uint64_t)) {
-        uint64_t random_word = 0xcbf29ce484222325;
-        for (int round = 0; round < 8; round++)
-        {
-            uint8_t word = 0;
-            for (int n = 0; n < 8; n++)
-            {
-                word = (word << 1) ^ (rosc_hw->randombit & 0xff);
-
-            }
-            _time = board_millis();
-            random_word *= 0x00000100000001B3;
-            random_word ^= word^((adc_sample[_time%ADC_BUFSIZE]^_time)%0x100);
-        }
-        memcpy(buf + i, &random_word, sizeof(random_word));
-    }
-    led_set_blink(BLINK_MOUNTED);
-}
-
-uint64_t fifoload(){
+void fifoload(){
     adc_gpio_init(26 + ADC);
     adc_init();
     adc_select_input(ADC);
@@ -687,6 +653,45 @@ uint64_t fifoload(){
 
 }
 
+
+/**
+ * @brief Get random data using the onboard pico ADC that essentially measure
+ *        environmental noise because it is assumed that it is not connected to anything.
+ *
+ * @param buf the buffer to store the random data in
+ * @param len the length of the random data in bytes
+ */
+void get_random_data(char *buf, uint16_t len) {
+    led_set_blink(BLINK_PROCESSING);
+    uint8_t adc_ref = adc_sample[counter];
+    if (len > 64)
+        len = 64;
+    memset(buf, 0, len);
+    uint64_t _time = 0;
+    /* This algorithm generates 2 words, i.e., 8 bytes. */
+    /* We apply Fowler–Noll–Vo hash function as it randomizes the input and is quite fast. */
+    for (int i = 0; i < len; i += sizeof(uint64_t)) {
+        uint64_t random_word = 0xcbf29ce484222325;
+        for (int round = 0; round < 8; round++)
+        {
+            uint8_t word = 0;
+            for (int n = 0; n < 8; n++)
+            {
+                word = (word << 1) ^ (rosc_hw->randombit & 0xff);
+
+            }
+            _time = board_millis();
+            random_word *= 0x00000100000001B3;
+            random_word ^= word^((adc_ref^adc_sample[_time%ADC_BUFSIZE]^_time)%0x100);
+        }
+        memcpy(buf + i, &random_word, sizeof(random_word));
+    }
+    counter++;
+    if (counter > ADC_BUFSIZE)
+        fifoload();
+        counter=0;
+    led_set_blink(BLINK_MOUNTED);
+}
 
 /**
  * @brief EP1 in transfer complete. Prime the EP1 in buffer
