@@ -30,8 +30,8 @@
 
 #include "pico/time.h"
 
-#define ADC_BUFSIZE 1024
-#define ADC 4
+#define ADC_BUFSIZE 512
+#define ADC 1
 
 uint8_t adc_sample[ADC_BUFSIZE];
 uint16_t counter=0;
@@ -682,7 +682,10 @@ void get_random_data(char *buf, uint16_t len) {
             word = (word << 1) ^ (rosc_hw->randombit & 0xff);
             word = (word << 1) ^ (rosc_hw->randombit & 0xff);
             word = (word << 1) ^ (rosc_hw->randombit & 0xff);
-            word = (word << (_time%8)) ^ (rosc_hw->randombit & 0xff);
+            word = (word << 1) ^ (rosc_hw->randombit & 0xff);
+            word = (word << 1) ^ (rosc_hw->randombit & 0xff);
+            word = (word << 1) ^ (rosc_hw->randombit & 0xff);
+            word = (word << 1) ^ (rosc_hw->randombit & 0xff);
 
             //}
             random_word *= 0x00000100000001B3;
