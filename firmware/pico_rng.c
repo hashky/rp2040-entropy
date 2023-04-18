@@ -31,7 +31,7 @@
 #include "pico/time.h"
 
 #define ADC_BUFSIZE 1024
-#define ADC 1
+#define ADC 4
 
 uint8_t adc_sample[ADC_BUFSIZE];
 uint16_t counter=0;
@@ -662,7 +662,6 @@ void fifoload(){
  * @param len the length of the random data in bytes
  */
 void get_random_data(char *buf, uint16_t len) {
-    led_set_blink(BLINK_PROCESSING);
     uint8_t adc_ref = adc_sample[counter];
     if (len > 64)
         len = 64;
@@ -670,17 +669,22 @@ void get_random_data(char *buf, uint16_t len) {
     uint64_t _time = 0;
     /* This algorithm generates 2 words, i.e., 8 bytes. */
     /* We apply Fowler–Noll–Vo hash function as it randomizes the input and is quite fast. */
+
+    uint64_t random_word = 0xcbf29ce484222325;
     for (int i = 0; i < len; i += sizeof(uint64_t)) {
-        uint64_t random_word = 0xcbf29ce484222325;
+
+        _time = board_millis();
         for (int round = 0; round < 8; round++)
         {
             uint8_t word = 0;
-            for (int n = 0; n < 8; n++)
-            {
-                word = (word << 1) ^ (rosc_hw->randombit & 0xff);
+            //for (int n = 0; n < 8; n++)
+            //{
+            word = (word << 1) ^ (rosc_hw->randombit & 0xff);
+            word = (word << 1) ^ (rosc_hw->randombit & 0xff);
+            word = (word << 1) ^ (rosc_hw->randombit & 0xff);
+            word = (word << (_time%8)) ^ (rosc_hw->randombit & 0xff);
 
-            }
-            _time = board_millis();
+            //}
             random_word *= 0x00000100000001B3;
             random_word ^= word^((adc_ref^adc_sample[_time%ADC_BUFSIZE]^_time)%0x100);
         }
@@ -689,8 +693,7 @@ void get_random_data(char *buf, uint16_t len) {
     counter++;
     if (counter > ADC_BUFSIZE)
         fifoload();
-        counter=0;
-    led_set_blink(BLINK_MOUNTED);
+    counter=0;
 }
 
 /**
